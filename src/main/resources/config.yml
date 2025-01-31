@@ -1,0 +1,15 @@
+# Maximum number of players shown in server list
+max-players: 69
+
+# List of fake player names to use
+fake-players:
+  - "KampferWolf"
+  - "RaBBii_XTremEz"
+  - "DarthHydra"
+  - "1gram"
+  - "IH4teThisGame"
+  - "_ArsenalPower_"
+  - "Reesar"
+  - "HomieDolpinYT"
+  - "FortBamibal"
+  - "0lli22h"

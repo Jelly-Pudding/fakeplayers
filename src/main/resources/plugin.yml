@@ -1,0 +1,6 @@
+name: FakePlayers
+version: '1.0-SNAPSHOT'
+main: com.jellypudding.fakePlayers.FakePlayers
+api-version: '1.21'
+description: "Creates fake players and hides plugin information"
+author: AlphaAlex115
