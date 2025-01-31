@@ -5,6 +5,9 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.entity.player.ChatVisiblity;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.server.level.ClientInformation;
 
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -121,6 +124,15 @@ public class FakePlayers extends JavaPlugin implements Listener {
             );
         }
 
+        // Clean up from server's player list if any players are online
+        if (!Bukkit.getOnlinePlayers().isEmpty()) {
+            Player anyPlayer = Bukkit.getOnlinePlayers().iterator().next();
+            net.minecraft.server.MinecraftServer server = ((CraftPlayer)anyPlayer).getHandle().getServer();
+            if (server != null) {  // Only check server for null
+                server.getPlayerList().getPlayers().removeIf(player -> player.getUUID().equals(uuid));
+            }
+        }
+
         for (Player realPlayer : Bukkit.getOnlinePlayers()) {
             sendFakePlayerRemove(realPlayer, uuid);
         }
@@ -129,13 +141,22 @@ public class FakePlayers extends JavaPlugin implements Listener {
     private void sendFakePlayerAdd(Player receiver, String name, UUID uuid) {
         try {
             CraftPlayer craftPlayer = (CraftPlayer) receiver;
+            if (craftPlayer.getHandle() == null) return;
+
+            net.minecraft.server.MinecraftServer server = craftPlayer.getHandle().getServer();
+            if (server == null) return;
+
+            net.minecraft.server.level.ServerLevel level = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
+            if (level == null) return;
+
             GameProfile profile = new GameProfile(uuid, name);
 
             // Player info packet with multiple actions
             ClientboundPlayerInfoUpdatePacket infoPacket = new ClientboundPlayerInfoUpdatePacket(
                     EnumSet.of(
                             ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER,
-                            ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED
+                            ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED,
+                            ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY
                     ),
                     List.of(new ClientboundPlayerInfoUpdatePacket.Entry(
                             uuid,
@@ -150,9 +171,13 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     ))
             );
 
+            // Instead of creating a real ServerPlayer, we'll just send the packets
             craftPlayer.getHandle().connection.send(infoPacket);
         } catch (Exception e) {
-            e.printStackTrace();
+            getLogger().severe("Error adding fake player " + name + ": " + e.getMessage());
+            if (e.getCause() != null) {
+                getLogger().severe("Caused by: " + e.getCause().getMessage());
+            }
         }
     }
 
@@ -166,7 +191,10 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
             craftPlayer.getHandle().connection.send(packet);
         } catch (Exception e) {
-            e.printStackTrace();
+            getLogger().severe("Error removing fake player with UUID " + uuid + ": " + e.getMessage());
+            if (e.getCause() != null) {
+                getLogger().severe("Caused by: " + e.getCause().getMessage());
+            }
         }
     }
 
