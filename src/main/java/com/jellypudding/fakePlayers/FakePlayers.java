@@ -1,14 +1,11 @@
 package com.jellypudding.fakePlayers;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.entity.player.ChatVisiblity;
-import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.server.level.ClientInformation;
-
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
@@ -18,7 +15,6 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
-
 import com.mojang.authlib.GameProfile;
 
 import java.util.*;
@@ -71,6 +67,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
+        // Delay between 300 and 600 ticks
         long delay = random.nextInt(300, 601);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
@@ -100,6 +97,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         currentFakePlayers.add(name);
         fakePlayerUUIDs.put(name, uuid);
 
+        // Broadcast join message to all players (using Adventure Components)
         Bukkit.broadcast(
                 Component.text(name)
                         .append(Component.text(" joined the game").color(NamedTextColor.YELLOW))
@@ -127,7 +125,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         // Clean up from server's player list if any players are online
         if (!Bukkit.getOnlinePlayers().isEmpty()) {
             Player anyPlayer = Bukkit.getOnlinePlayers().iterator().next();
-            net.minecraft.server.MinecraftServer server = ((CraftPlayer)anyPlayer).getHandle().getServer();
+            net.minecraft.server.MinecraftServer server = ((CraftPlayer) anyPlayer).getHandle().getServer();
             if (server != null) {  // Only check server for null
                 server.getPlayerList().getPlayers().removeIf(player -> player.getUUID().equals(uuid));
             }
@@ -151,7 +149,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
             GameProfile profile = new GameProfile(uuid, name);
 
-            // Player info packet with multiple actions
+            // Create a player info packet with multiple actions (add, update listed, update latency)
             ClientboundPlayerInfoUpdatePacket infoPacket = new ClientboundPlayerInfoUpdatePacket(
                     EnumSet.of(
                             ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER,
@@ -171,7 +169,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     ))
             );
 
-            // Instead of creating a real ServerPlayer, we'll just send the packets
+            // Send the packet to the receiver without adding a real ServerPlayer
             craftPlayer.getHandle().connection.send(infoPacket);
         } catch (Exception e) {
             getLogger().severe("Error adding fake player " + name + ": " + e.getMessage());
@@ -201,6 +199,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joining = event.getPlayer();
+        // When a real player joins, send them all fake players so they see the correct tab list
         for (String fakeName : currentFakePlayers) {
             UUID uuid = fakePlayerUUIDs.get(fakeName);
             if (uuid != null) {
@@ -211,6 +210,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPaperServerListPing(PaperServerListPingEvent event) {
+        // This event controls the server list ping (the MOTD and player sample when a client pings the server)
         for (Map.Entry<String, UUID> entry : fakePlayerUUIDs.entrySet()) {
             event.getListedPlayers().add(
                     new PaperServerListPingEvent.ListedPlayerInfo(
@@ -223,13 +223,49 @@ public class FakePlayers extends JavaPlugin implements Listener {
         event.setMaxPlayers(maxPlayers);
     }
 
+    // Intercept certain commands; now including /list to show fake players in a formatted message.
     @EventHandler
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        String cmd = event.getMessage().toLowerCase();
-        if (cmd.startsWith("/plugins") || cmd.startsWith("/pl") ||
-                cmd.startsWith("/help") || cmd.startsWith("/?")) {
+        String message = event.getMessage();
+        String lowerMessage = message.toLowerCase();
+
+        // Block plugin-related and help commands
+        if (lowerMessage.startsWith("/plugins") || lowerMessage.startsWith("/pl") ||
+                lowerMessage.startsWith("/help") || lowerMessage.startsWith("/?")) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage("Unknown command. Type \"/help\" for help.");
+            event.getPlayer().sendMessage(Component.text("Unknown command. Type \"/help\" for help."));
+            return;
+        }
+
+        // Intercept /list command to add fake players into the output
+        if (lowerMessage.startsWith("/list")) {
+            event.setCancelled(true);
+            int realCount = Bukkit.getOnlinePlayers().size();
+            int fakeCount = currentFakePlayers.size();
+            int totalCount = realCount + fakeCount;
+
+            // Build a list of Components for player names.
+            List<Component> nameComponents = new ArrayList<>();
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                // Use the player's display name (this preserves any colour formatting)
+                nameComponents.add(player.displayName());
+            }
+            for (String fakeName : currentFakePlayers) {
+                // Fake players are now explicitly set to white.
+                nameComponents.add(Component.text(fakeName).color(NamedTextColor.WHITE));
+            }
+
+            // Join the names with a comma and space separator using the new JoinConfiguration method
+            Component namesJoined = Component.join(JoinConfiguration.separator(Component.text(", ")), nameComponents);
+
+            Component finalMessage = Component.text("There are ")
+                    .append(Component.text(totalCount).color(NamedTextColor.WHITE))
+                    .append(Component.text(" of a max of "))
+                    .append(Component.text(maxPlayers).color(NamedTextColor.WHITE))
+                    .append(Component.text(" players online: "))
+                    .append(namesJoined);
+
+            event.getPlayer().sendMessage(finalMessage);
         }
     }
 }
