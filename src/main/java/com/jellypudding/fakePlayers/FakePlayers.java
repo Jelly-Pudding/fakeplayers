@@ -67,9 +67,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
-        // Delay between 10 and 30 minutes in ticks.
-        // 10 minutes = 10 * 60 * 20 = 12000 ticks; 30 minutes = 30 * 60 * 20 = 36000 ticks.
-        long delay = random.nextInt(12000, 36001);
+        // Delay between 15 and 50 minutes.
+        long delay = random.nextInt(900, 3000);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
