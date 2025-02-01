@@ -67,8 +67,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
-        // Delay between 15 and 50 minutes.
-        long delay = random.nextInt(900, 3000);
+        long delay = random.nextInt(3000, 5000);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
