@@ -4,3 +4,7 @@ main: com.jellypudding.fakePlayers.FakePlayers
 api-version: '1.21'
 description: "Creates fake players and hides plugin information"
 author: AlphaAlex115
+permissions:
+  fakeplayers.showinfo:
+    description: "Allows the user to view plugin information via commands such as /plugins, /pl, /help, and /?."
+    default: op

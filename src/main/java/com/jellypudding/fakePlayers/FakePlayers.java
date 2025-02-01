@@ -38,7 +38,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
         scheduleNextUpdate();
 
-        getLogger().info("FakePlayers enabled - current fake players: " + currentFakePlayers.size());
+        getLogger().info("FakePlayers enabled");
     }
 
     @Override
@@ -67,20 +67,39 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
-        // Delay between 300 and 600 ticks
-        long delay = random.nextInt(300, 601);
+        // Delay between 10 and 30 minutes in ticks.
+        // 10 minutes = 10 * 60 * 20 = 12000 ticks; 30 minutes = 30 * 60 * 20 = 36000 ticks.
+        long delay = random.nextInt(12000, 36001);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
-            getLogger().info("Updated fake players - current count: " + currentFakePlayers.size());
             scheduleNextUpdate();
         }, delay);
     }
 
     private void updateFakePlayers() {
+        int realCount = Bukkit.getOnlinePlayers().size();
+        int fakeCount = currentFakePlayers.size();
+        int totalCount = realCount + fakeCount;
+
+        // Define an occupancy threshold as a percentage of max players.
+        final double occupancyThreshold = 0.90; // 90%
+        double occupancy = (double) totalCount / maxPlayers;
+
+        // If occupancy is at or above the threshold and there is at least one fake player,
+        // remove a fake player.
+        if (occupancy >= occupancyThreshold && !currentFakePlayers.isEmpty()) {
+            List<String> current = new ArrayList<>(currentFakePlayers);
+            String playerToRemove = current.get(random.nextInt(current.size()));
+            removeFakePlayer(playerToRemove, true);
+            return;
+        }
+
+        // Otherwise, proceed with the normal random add/remove logic.
         boolean doAdd = random.nextBoolean();
         boolean doRemove = random.nextBoolean();
 
-        if (doAdd && currentFakePlayers.size() < fakePlayerNames.size()) {
+        // Only add a fake player if doing so would keep occupancy below the threshold.
+        if (doAdd && fakeCount < fakePlayerNames.size() && ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
             String randomName = fakePlayerNames.get(random.nextInt(fakePlayerNames.size()));
             if (!currentFakePlayers.contains(randomName)) {
                 addFakePlayer(randomName);
@@ -122,11 +141,11 @@ public class FakePlayers extends JavaPlugin implements Listener {
             );
         }
 
-        // Clean up from server's player list if any players are online
+        // Clean up from server's player list if any players are online.
         if (!Bukkit.getOnlinePlayers().isEmpty()) {
             Player anyPlayer = Bukkit.getOnlinePlayers().iterator().next();
             net.minecraft.server.MinecraftServer server = ((CraftPlayer) anyPlayer).getHandle().getServer();
-            if (server != null) {  // Only check server for null
+            if (server != null) {
                 server.getPlayerList().getPlayers().removeIf(player -> player.getUUID().equals(uuid));
             }
         }
@@ -149,7 +168,10 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
             GameProfile profile = new GameProfile(uuid, name);
 
-            // Create a player info packet with multiple actions (add, update listed, update latency)
+            // Use a random latency between 0 and 150 (inclusive) for variability.
+            int latency = random.nextInt(151);
+
+            // Create a player info packet with multiple actions (add, update listed, update latency).
             ClientboundPlayerInfoUpdatePacket infoPacket = new ClientboundPlayerInfoUpdatePacket(
                     EnumSet.of(
                             ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER,
@@ -160,7 +182,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                             uuid,
                             profile,
                             true,    // listed
-                            0,       // latency
+                            latency, // latency (randomized)
                             GameType.SURVIVAL,
                             null,    // displayName
                             false,   // showHat
@@ -169,7 +191,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     ))
             );
 
-            // Send the packet to the receiver without adding a real ServerPlayer
+            // Send the packet to the receiver without adding a real ServerPlayer.
             craftPlayer.getHandle().connection.send(infoPacket);
         } catch (Exception e) {
             getLogger().severe("Error adding fake player " + name + ": " + e.getMessage());
@@ -199,7 +221,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joining = event.getPlayer();
-        // When a real player joins, send them all fake players so they see the correct tab list
+        // When a real player joins, send them all fake players so they see the correct tab list.
         for (String fakeName : currentFakePlayers) {
             UUID uuid = fakePlayerUUIDs.get(fakeName);
             if (uuid != null) {
@@ -210,16 +232,26 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPaperServerListPing(PaperServerListPingEvent event) {
-        // This event controls the server list ping (the MOTD and player sample when a client pings the server)
+        // In the server list ping, ensure that the displayed total never exceeds maxPlayers.
+        int realCount = Bukkit.getOnlinePlayers().size();
+        int allowedFake = Math.max(0, maxPlayers - realCount);
+
+        // Build a list of fake players limited to allowedFake.
+        List<PaperServerListPingEvent.ListedPlayerInfo> fakeList = new ArrayList<>();
+        int count = 0;
         for (Map.Entry<String, UUID> entry : fakePlayerUUIDs.entrySet()) {
-            event.getListedPlayers().add(
-                    new PaperServerListPingEvent.ListedPlayerInfo(
-                            entry.getKey(),
-                            entry.getValue()
-                    )
-            );
+            if (count < allowedFake) {
+                fakeList.add(new PaperServerListPingEvent.ListedPlayerInfo(entry.getKey(), entry.getValue()));
+                count++;
+            } else {
+                break;
+            }
         }
-        event.setNumPlayers(event.getNumPlayers() + currentFakePlayers.size());
+
+        // Set the displayed player count to real players plus the allowed fake ones.
+        event.setNumPlayers(realCount + fakeList.size());
+        event.getListedPlayers().clear();
+        event.getListedPlayers().addAll(fakeList);
         event.setMaxPlayers(maxPlayers);
     }
 
@@ -229,15 +261,16 @@ public class FakePlayers extends JavaPlugin implements Listener {
         String message = event.getMessage();
         String lowerMessage = message.toLowerCase();
 
-        // Block plugin-related and help commands
-        if (lowerMessage.startsWith("/plugins") || lowerMessage.startsWith("/pl") ||
-                lowerMessage.startsWith("/help") || lowerMessage.startsWith("/?")) {
+        // Only block /plugins, /pl, /help, or /? if the player does NOT have the permission "fakeplayers.showinfo"
+        if ((lowerMessage.startsWith("/plugins") || lowerMessage.startsWith("/pl") ||
+                lowerMessage.startsWith("/help") || lowerMessage.startsWith("/?"))
+                && !event.getPlayer().hasPermission("fakeplayers.showinfo")) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage(Component.text("Unknown command. Type \"/help\" for help."));
+            event.getPlayer().sendMessage(Component.text("This command is currently unavailable."));
             return;
         }
 
-        // Intercept /list command to add fake players into the output
+        // Intercept /list command to add fake players into the output.
         if (lowerMessage.startsWith("/list")) {
             event.setCancelled(true);
             int realCount = Bukkit.getOnlinePlayers().size();
@@ -247,15 +280,15 @@ public class FakePlayers extends JavaPlugin implements Listener {
             // Build a list of Components for player names.
             List<Component> nameComponents = new ArrayList<>();
             for (Player player : Bukkit.getOnlinePlayers()) {
-                // Use the player's display name (this preserves any colour formatting)
+                // Use the player's display name (this preserves any colour formatting).
                 nameComponents.add(player.displayName());
             }
             for (String fakeName : currentFakePlayers) {
-                // Fake players are now explicitly set to white.
+                // Fake players are explicitly set to white.
                 nameComponents.add(Component.text(fakeName).color(NamedTextColor.WHITE));
             }
 
-            // Join the names with a comma and space separator using the new JoinConfiguration method
+            // Join the names with a comma and space separator using the new JoinConfiguration method.
             Component namesJoined = Component.join(JoinConfiguration.separator(Component.text(", ")), nameComponents);
 
             Component finalMessage = Component.text("There are ")
