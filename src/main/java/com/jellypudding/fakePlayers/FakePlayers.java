@@ -7,6 +7,7 @@ import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.world.level.GameType;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -16,16 +17,26 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 
 import java.util.*;
 
 public class FakePlayers extends JavaPlugin implements Listener {
 
-    private List<String> fakePlayerNames;
+    private Map<String, PlayerSkinData> fakePlayerData;
     private Set<String> currentFakePlayers;
     private Map<String, UUID> fakePlayerUUIDs;
     private final Random random = new Random();
     private int maxPlayers;
+
+    private static class PlayerSkinData {
+        String texture;
+        String signature;
+        PlayerSkinData(String texture, String signature) {
+            this.texture = texture;
+            this.signature = signature;
+        }
+    }
 
     @Override
     public void onEnable() {
@@ -51,23 +62,35 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void loadConfig() {
-        fakePlayerNames = getConfig().getStringList("fake-players");
+        fakePlayerData = new HashMap<>();
         maxPlayers = getConfig().getInt("max-players", 69);
 
-        if (fakePlayerNames.isEmpty()) {
-            fakePlayerNames = new ArrayList<>();
-            fakePlayerNames.add("Steve");
-            fakePlayerNames.add("Alex");
-            fakePlayerNames.add("Notch");
+        ConfigurationSection playersSection = getConfig().getConfigurationSection("fake-players");
+        if (playersSection == null) {
+            // Create default config if none exists
+            Map<String, PlayerSkinData> defaultPlayers = new HashMap<>();
+            defaultPlayers.put("Steve", new PlayerSkinData("defaultTexture", "defaultSignature"));
 
-            getConfig().set("fake-players", fakePlayerNames);
+            for (Map.Entry<String, PlayerSkinData> entry : defaultPlayers.entrySet()) {
+                getConfig().set("fake-players." + entry.getKey() + ".texture", entry.getValue().texture);
+                getConfig().set("fake-players." + entry.getKey() + ".signature", entry.getValue().signature);
+            }
             getConfig().set("max-players", maxPlayers);
             saveConfig();
+        } else {
+            // Load existing config
+            for (String name : playersSection.getKeys(false)) {
+                String texture = playersSection.getString(name + ".texture");
+                String signature = playersSection.getString(name + ".signature");
+                if (texture != null && signature != null) {
+                    fakePlayerData.put(name, new PlayerSkinData(texture, signature));
+                }
+            }
         }
     }
 
     private void scheduleNextUpdate() {
-        long delay = random.nextInt(3000, 5000);
+        long delay = random.nextInt(300, 500);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
@@ -97,9 +120,11 @@ public class FakePlayers extends JavaPlugin implements Listener {
         boolean doRemove = random.nextBoolean();
 
         // Only add a fake player if doing so would keep occupancy below the threshold.
-        if (doAdd && fakeCount < fakePlayerNames.size() && ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
-            String randomName = fakePlayerNames.get(random.nextInt(fakePlayerNames.size()));
-            if (!currentFakePlayers.contains(randomName)) {
+        if (doAdd && fakeCount < fakePlayerData.size() && ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
+            List<String> availablePlayers = new ArrayList<>(fakePlayerData.keySet());
+            availablePlayers.removeAll(currentFakePlayers);
+            if (!availablePlayers.isEmpty()) {
+                String randomName = availablePlayers.get(random.nextInt(availablePlayers.size()));
                 addFakePlayer(randomName);
             }
         } else if (doRemove && !currentFakePlayers.isEmpty()) {
@@ -165,6 +190,11 @@ public class FakePlayers extends JavaPlugin implements Listener {
             if (level == null) return;
 
             GameProfile profile = new GameProfile(uuid, name);
+
+            PlayerSkinData skinData = fakePlayerData.get(name);
+            if (skinData != null) {
+                profile.getProperties().put("textures", new Property("textures", skinData.texture, skinData.signature));
+            }
 
             // Use a random latency between 0 and 150 (inclusive) for variability.
             int latency = random.nextInt(151);
