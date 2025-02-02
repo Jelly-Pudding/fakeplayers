@@ -3,9 +3,13 @@ package com.jellypudding.fakePlayers;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.format.NamedTextColor;
+
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.world.level.GameType;
+
+import io.papermc.paper.event.player.AsyncChatEvent;
+
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -15,19 +19,28 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.jetbrains.annotations.NotNull;
+
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
+
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 
 import java.util.*;
 
-public class FakePlayers extends JavaPlugin implements Listener {
+public class FakePlayers extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
 
     private Map<String, PlayerSkinData> fakePlayerData;
     private Set<String> currentFakePlayers;
     private Map<String, UUID> fakePlayerUUIDs;
     private final Random random = new Random();
     private int maxPlayers;
+    private boolean enableChat;
+    private ChatAI chatAI;
 
     private static class PlayerSkinData {
         String texture;
@@ -47,6 +60,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
         fakePlayerUUIDs = new HashMap<>();
 
         getServer().getPluginManager().registerEvents(this, this);
+        Objects.requireNonNull(getCommand("fakeplayers")).setExecutor(this);
+        Objects.requireNonNull(getCommand("fakeplayers")).setTabCompleter(this);
         scheduleNextUpdate();
 
         getLogger().info("FakePlayers enabled");
@@ -64,6 +79,17 @@ public class FakePlayers extends JavaPlugin implements Listener {
     private void loadConfig() {
         fakePlayerData = new HashMap<>();
         maxPlayers = getConfig().getInt("max-players", 69);
+        enableChat = getConfig().getBoolean("enable-chat", false);
+
+        if (enableChat) {
+            String apiKey = getConfig().getString("openrouter-api-key", "");
+            if (!apiKey.isEmpty()) {
+                chatAI = new ChatAI(apiKey, getLogger());
+            } else {
+                getLogger().warning("Chat is enabled but no OpenRouter API key provided!");
+                enableChat = false;
+            }
+        }
 
         ConfigurationSection playersSection = getConfig().getConfigurationSection("fake-players");
         if (playersSection == null) {
@@ -90,7 +116,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
-        long delay = random.nextInt(3000, 5000);
+        long delay = random.nextInt(300, 500);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
@@ -248,6 +274,51 @@ public class FakePlayers extends JavaPlugin implements Listener {
         }
     }
 
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, String @NotNull [] args) {
+        if (command.getName().equalsIgnoreCase("fakeplayers")) {
+            if (args.length == 0) {
+                sender.sendMessage("Usage: /fakeplayers reload");
+                return true;
+            }
+
+            if (args[0].equalsIgnoreCase("reload")) {
+                if (!sender.hasPermission("fakeplayers.reload")) {
+                    sender.sendMessage(Component.text("You don't have permission to use this command!").color(NamedTextColor.RED));
+                    return true;
+                }
+
+                // Remove all current fake players
+                for (String name : new ArrayList<>(currentFakePlayers)) {
+                    removeFakePlayer(name, false);
+                }
+                currentFakePlayers.clear();
+                fakePlayerUUIDs.clear();
+
+                // Reload config
+                reloadConfig();
+                loadConfig();
+
+                sender.sendMessage(Component.text("FakePlayers configuration reloaded!").color(NamedTextColor.GREEN));
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    @Override
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, String @NotNull [] args) {
+        if (command.getName().equalsIgnoreCase("fakeplayers") && args.length == 1) {
+            List<String> completions = new ArrayList<>();
+            if (sender.hasPermission("fakeplayers.reload") && "reload".startsWith(args[0].toLowerCase())) {
+                completions.add("reload");
+            }
+            return completions;
+        }
+        return new ArrayList<>();
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joining = event.getPlayer();
@@ -283,6 +354,39 @@ public class FakePlayers extends JavaPlugin implements Listener {
         event.getListedPlayers().clear();
         event.getListedPlayers().addAll(fakeList);
         event.setMaxPlayers(maxPlayers);
+    }
+
+    @EventHandler
+    public void onPlayerChat(AsyncChatEvent event) {
+        if (!enableChat || chatAI == null) return;
+
+        String message = ((Component)event.message()).toString().toLowerCase();
+
+        for (String fakeName : currentFakePlayers) {
+            if (message.contains(fakeName.toLowerCase())) {
+                // Wait 1-3 seconds before responding
+                Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
+                    String response = chatAI.generateResponse(fakeName, message);
+                    if (response != null && !response.trim().isEmpty()) {
+                        // Clean up response - remove any self-references like "name:" or *name:*
+                        String cleanResponse = response.replaceAll("(?i)\\*?" + fakeName + "\\*?:\\s*", "").trim();
+
+                        if (!cleanResponse.isEmpty()) {
+                            // Switch back to main thread to broadcast
+                            final String finalResponse = cleanResponse;  // Make it effectively final
+                            Bukkit.getScheduler().runTask(this, () -> {
+                                Bukkit.broadcast(
+                                        Component.text("<")
+                                                .append(Component.text(fakeName).color(NamedTextColor.WHITE))
+                                                .append(Component.text("> "))
+                                                .append(Component.text(finalResponse))
+                                );
+                            });
+                        }
+                    }
+                }, 20L + random.nextInt(40));
+            }
+        }
     }
 
     // Intercept certain commands; now including /list to show fake players in a formatted message.

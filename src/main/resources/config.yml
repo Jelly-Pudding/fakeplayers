@@ -1,6 +1,11 @@
 # Maximum number of players shown in server list
 max-players: 69
 
+# Enable chat responses from fake players
+enable-chat: false
+# OpenRouter API key for chat responses (required if enable-chat is true)
+openrouter-api-key: ""
+
 # List of fake player names and their skin data
 fake-players:
   KampferWolf:
