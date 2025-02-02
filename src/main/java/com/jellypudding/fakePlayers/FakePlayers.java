@@ -90,7 +90,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
-        long delay = random.nextInt(300, 500);
+        long delay = random.nextInt(3000, 5000);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
@@ -196,8 +196,10 @@ public class FakePlayers extends JavaPlugin implements Listener {
                 profile.getProperties().put("textures", new Property("textures", skinData.texture, skinData.signature));
             }
 
-            // Use a random latency between 0 and 150 (inclusive) for variability.
-            int latency = random.nextInt(151);
+            // Make it about 75% chance of 5 bars (0-149ms) and 25% chance of 4 bars (150-299ms)
+            int latency = random.nextInt(4) > 0 ?
+                    random.nextInt(150) :
+                    random.nextInt(150, 300);
 
             // Create a player info packet with multiple actions (add, update listed, update latency).
             ClientboundPlayerInfoUpdatePacket infoPacket = new ClientboundPlayerInfoUpdatePacket(
