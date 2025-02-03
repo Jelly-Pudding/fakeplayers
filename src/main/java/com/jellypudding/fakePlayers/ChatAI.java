@@ -21,7 +21,7 @@ public class ChatAI {
     private final Map<String, Integer> consecutiveFailures = new ConcurrentHashMap<>();
     // Track "disabled until" per model
     private final Map<String, Long> modelDisabledUntil = new ConcurrentHashMap<>();
-    private static final int MAX_CONSECUTIVE_FAILURES = 5;
+    private static final int MAX_CONSECUTIVE_FAILURES = 7;
     // How long to disable a model if we exceed consecutive failures, in milliseconds (24 hours)
     private static final long DISABLE_DURATION_MS = 24 * 60 * 60 * 1000L;
     private static final String API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -68,15 +68,15 @@ public class ChatAI {
 
         String prompt = makeOffTopic ?
                 String.format(
-                        "You are %s, an in-game player. Generate ONE off-topic comment in 1-2 short sentences that a player might randomly say. " +
+                        "You are %s, an in-game minecraft player on an anarchy server. Generate ONE concise off-topic comment in 1-2 short sentences that a player might randomly say. " +
                                 "You have a %s personality. Write your response in a %s style - this affects your spelling, grammar, and punctuation. " +
                                 "Topics can include: politics, life events, in-game players, random thoughts. " +
                                 "Do not include your name or any chat formatting in the response. Just write the message you want to say.",
                         playerName, playerData.personality, playerData.textStyle
                 ) :
                 String.format(
-                        "You are %s, an in-game Minecraft player. Here's the recent chat history:\n\n%s\n\n" +
-                                "Generate ONE response in 1-2 short sentences. You have to appear human. " +
+                        "You are %s, an in-game Minecraft player on an anarchy server. Here's the recent chat history:\n\n%s\n\n" +
+                                "Generate ONE concise response in 1-2 short sentences. You have to appear human. " +
                                 "You have a %s personality. Write your response in a %s style - this affects your spelling, grammar, and punctuation. " +
                                 "Do not include your name or any chat formatting in the response. " +
                                 "Just write the message you want to say.",

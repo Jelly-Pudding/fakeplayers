@@ -35,7 +35,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     private boolean enableChat;
     private ChatAI chatAI;
     private final Queue<String> recentMessages = new LinkedList<>();
-    private static final int MAX_RECENT_MESSAGES = 15;
+    private static final int MAX_RECENT_MESSAGES = 8;
     Map<String, PlayerFakeAllData> fakePlayerData;
 
     public static class PlayerFakeAllData {
@@ -330,10 +330,10 @@ public class FakePlayers extends JavaPlugin implements Listener {
         }
 
         // We always schedule the next check, even if no fake players are currently online.
-        long delay = random.nextInt(300, 2000);
+        long delay = random.nextInt(3000, 7000);
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             // If we have at least one fake player, pick one at random to speak
-            if (!currentFakePlayers.isEmpty()) {
+            if (!currentFakePlayers.isEmpty() && random.nextDouble() > 0.3) {
                 List<String> players = new ArrayList<>(currentFakePlayers);
                 String speaker = players.get(random.nextInt(players.size()));
 
@@ -345,6 +345,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                             .replaceAll("^['\"]+", "")
                             .replaceAll("['\"]+$", "")
                             .replaceAll("\n.*", "")
+                            .replaceAll("[^\\p{ASCII}]", "")
                             .trim();
                     if (!cleanResponse.isEmpty()) {
                         final String finalResponse = cleanResponse;
@@ -402,6 +403,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                                 .replaceAll("(?i)\\*?" + fakeName + "\\*?:\\s*", "")
                                 .replaceAll("^\"(.+)\"$", "$1")
                                 .replaceAll("\n.*", "")
+                                .replaceAll("[^\\p{ASCII}]", "")
                                 .trim();
 
                         if (!cleanResponse.isEmpty()) {
