@@ -122,7 +122,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
-        long delay = random.nextInt(300, 500);
+        long delay = random.nextInt(3000, 5000);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
@@ -328,7 +328,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         }
 
         // We always schedule the next check, even if no fake players are currently online.
-        long delay = random.nextInt(300, 500);
+        long delay = random.nextInt(300, 3000);
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             // If we have at least one fake player, pick one at random to speak
             if (!currentFakePlayers.isEmpty()) {

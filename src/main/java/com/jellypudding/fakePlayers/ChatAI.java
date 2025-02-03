@@ -32,10 +32,6 @@ public class ChatAI {
         String context = String.join("\n", recentMessages);
         FakePlayers.PlayerFakeAllData playerData = fakePlayerData.get(playerName);
 
-        // Log recent messages
-        logger.info("Recent messages for " + playerName + ":");
-        logger.info(context);
-
         if (playerData == null) {
             logger.warning("No data found for player: " + playerName);
             return null;
