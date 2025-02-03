@@ -7,9 +7,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class ChatAI {
@@ -18,6 +17,13 @@ public class ChatAI {
     private final Gson gson;
     private final Logger logger;
     private final Map<String, FakePlayers.PlayerFakeAllData> fakePlayerData;
+    // Track consecutive failures per model
+    private final Map<String, Integer> consecutiveFailures = new ConcurrentHashMap<>();
+    // Track "disabled until" per model
+    private final Map<String, Long> modelDisabledUntil = new ConcurrentHashMap<>();
+    private static final int MAX_CONSECUTIVE_FAILURES = 5;
+    // How long to disable a model if we exceed consecutive failures, in milliseconds (24 hours)
+    private static final long DISABLE_DURATION_MS = 24 * 60 * 60 * 1000L;
     private static final String API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
     public ChatAI(String apiKey, Logger logger, Map<String, FakePlayers.PlayerFakeAllData> fakePlayerData) {
@@ -37,8 +43,28 @@ public class ChatAI {
             return null;
         }
 
-        // 20% chance for off-topic comment
-        boolean makeOffTopic = Math.random() < 0.20;
+        // The model you want to use
+        String model = playerData.model;
+
+        if (isModelDisabled(model)) {
+            // Try fallback
+            for (String possibleFallback : List.of(
+                    "deepseek/deepseek-r1:free",
+                    "meta-llama/llama-3.2-3b-instruct" // not free, but we likely exceeded free usage cap.
+            )) {
+                if (!isModelDisabled(possibleFallback)) {
+                    logger.info("Using fallback model '" + possibleFallback + "' for " + playerName);
+                    model = possibleFallback;
+                    break;
+                }
+            }
+            if (isModelDisabled(model)) {
+                return null;
+            }
+        }
+
+        // 5% chance for off-topic comment
+        boolean makeOffTopic = Math.random() < 0.05;
 
         String prompt = makeOffTopic ?
                 String.format(
@@ -59,7 +85,7 @@ public class ChatAI {
 
         try {
             Map<String, Object> requestBody = Map.of(
-                    "model", "deepseek/deepseek-r1:free",
+                    "model", model,
                     "messages", List.of(
                             Map.of(
                                     "role", "user",
@@ -81,42 +107,95 @@ public class ChatAI {
                 try {
                     JsonObject jsonResponse = gson.fromJson(response.body(), JsonObject.class);
                     if (jsonResponse == null) {
+                        handleFailure(model);
                         logger.warning("ChatAI: JSON response is null despite status 200.");
                         return null;
                     }
                     if (!jsonResponse.has("choices")) {
+                        handleFailure(model);
                         logger.warning("ChatAI: 'choices' field missing in JSON response.");
                         return null;
                     }
 
                     JsonArray choices = jsonResponse.getAsJsonArray("choices");
                     if (choices.isEmpty()) {
+                        handleFailure(model);
                         logger.warning("ChatAI: 'choices' array is empty in JSON response.");
                         return null;
                     }
 
                     JsonObject firstChoice = choices.get(0).getAsJsonObject();
                     if (firstChoice == null || !firstChoice.has("message")) {
+                        handleFailure(model);
                         logger.warning("ChatAI: 'message' object missing in first choice.");
                         return null;
                     }
 
                     JsonObject message = firstChoice.getAsJsonObject("message");
                     if (message == null || !message.has("content")) {
+                        handleFailure(model);
                         logger.warning("ChatAI: 'content' missing in 'message' object.");
                         return null;
                     }
 
-                    return message.get("content").getAsString();
+                    resetFailureCount(model);
+                    String content = message.get("content").getAsString().trim();
+                    String lower = content.toLowerCase();
+                    if (lower.contains("i cannot generate a response") ||
+                            lower.contains("i cannot provide") ||
+                            lower.contains("i cannot generate") ||
+                            lower.contains("i cannot comply") ||
+                            lower.contains("i refuse to") ||
+                            lower.contains("i cannot do that") ||
+                            lower.contains("as an ai") ||
+                            lower.contains("is there anything else i can help you with"))
+                    {
+                        logger.info("ChatAI: Model '" + model + "' returned a disclaimer/refusal text. Returning null instead.");
+                        return null;
+                    }
+
+                    return content;
                 } catch (Exception e) {
+                    handleFailure(model);
                     logger.warning("ChatAI: Error parsing API response: " + e.getMessage());
                 }
             } else {
+                handleFailure(model);
                 logger.warning("ChatAI: API request failed, status code " + response.statusCode());
             }
         } catch (Exception e) {
+            handleFailure(model);
             logger.warning("ChatAI: Error generating response: " + e.getMessage());
         }
         return null;
+    }
+
+    private void handleFailure(String model) {
+        consecutiveFailures.merge(model, 1, Integer::sum);
+        int newCount = consecutiveFailures.get(model);
+
+        if (newCount >= MAX_CONSECUTIVE_FAILURES) {
+            long disableUntil = System.currentTimeMillis() + DISABLE_DURATION_MS;
+            modelDisabledUntil.put(model, disableUntil);
+            logger.warning("Model '" + model + "' disabled until " + new java.util.Date(disableUntil)
+                    + " after " + newCount + " consecutive failures.");
+        }
+    }
+
+    private void resetFailureCount(String model) {
+        consecutiveFailures.remove(model);
+    }
+
+    private boolean isModelDisabled(String model) {
+        Long disabledUntil = modelDisabledUntil.getOrDefault(model, 0L);
+        long now = System.currentTimeMillis();
+        if (now < disabledUntil) {
+            return true;
+        }
+        if (disabledUntil != 0L) {
+            modelDisabledUntil.remove(model);
+            consecutiveFailures.remove(model);
+        }
+        return false;
     }
 }

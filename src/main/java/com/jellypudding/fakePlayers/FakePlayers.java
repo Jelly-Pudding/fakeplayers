@@ -43,12 +43,14 @@ public class FakePlayers extends JavaPlugin implements Listener {
         String signature;
         String personality;
         String textStyle;
+        String model;
 
-        PlayerFakeAllData(String texture, String signature, String personality, String textStyle) {
+        PlayerFakeAllData(String texture, String signature, String personality, String textStyle, String model) {
             this.texture = texture;
             this.signature = signature;
             this.personality = personality != null ? personality : "sarcastic and insulting";
             this.textStyle = textStyle != null ? textStyle : "normal";
+            this.model = model != null ? model : "deepseek/deepseek-r1:free";
         }
     }
 
@@ -97,7 +99,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         if (playersSection == null) {
             // Create default config if none exists
             Map<String, PlayerFakeAllData> defaultPlayers = new HashMap<>();
-            defaultPlayers.put("Steve", new PlayerFakeAllData("defaultTexture", "defaultSignature", "caustic", "perfect"));
+            defaultPlayers.put("Steve", new PlayerFakeAllData("defaultTexture", "defaultSignature", "caustic", "perfect", "deepseek/deepseek-r1:free"));
 
             for (Map.Entry<String, PlayerFakeAllData> entry : defaultPlayers.entrySet()) {
                 getConfig().set("fake-players." + entry.getKey() + ".texture", entry.getValue().texture);
@@ -114,15 +116,16 @@ public class FakePlayers extends JavaPlugin implements Listener {
                 String signature = playersSection.getString(name + ".signature");
                 String personality = playersSection.getString(name + ".personality", "cynical");
                 String textStyle = playersSection.getString(name + ".text-style", "perfect");
+                String model = playersSection.getString(name + ".model", "deepseek/deepseek-r1:free");
                 if (texture != null && signature != null) {
-                    fakePlayerData.put(name, new PlayerFakeAllData(texture, signature, personality, textStyle));
+                    fakePlayerData.put(name, new PlayerFakeAllData(texture, signature, personality, textStyle, model));
                 }
             }
         }
     }
 
     private void scheduleNextUpdate() {
-        long delay = random.nextInt(3000, 5000);
+        long delay = random.nextInt(3000, 6000);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
@@ -145,9 +148,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
             return;
         }
 
-        // Normal random add/remove logic
-        boolean doAdd = random.nextBoolean();
-        boolean doRemove = random.nextBoolean();
+        boolean doAdd = random.nextDouble() < 0.48;
+        boolean doRemove = random.nextDouble() < 0.52;
 
         if (doAdd && fakeCount < fakePlayerData.size() &&
                 ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
@@ -328,7 +330,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         }
 
         // We always schedule the next check, even if no fake players are currently online.
-        long delay = random.nextInt(300, 3000);
+        long delay = random.nextInt(300, 2000);
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             // If we have at least one fake player, pick one at random to speak
             if (!currentFakePlayers.isEmpty()) {
@@ -339,10 +341,11 @@ public class FakePlayers extends JavaPlugin implements Listener {
                 if (response != null && !response.trim().isEmpty()) {
                     String cleanResponse = response
                             .replaceAll("(?i)\\*?" + speaker + "\\*?:\\s*", "")
-                            .replaceAll("^\"(.+)\"$", "$1")
+                            // Remove any leading or trailing quotes, single or double
+                            .replaceAll("^['\"]+", "")
+                            .replaceAll("['\"]+$", "")
                             .replaceAll("\n.*", "")
                             .trim();
-
                     if (!cleanResponse.isEmpty()) {
                         final String finalResponse = cleanResponse;
                         Bukkit.getScheduler().runTask(this, () -> {
