@@ -68,19 +68,16 @@ public class ChatAI {
 
         String prompt = makeOffTopic ?
                 String.format(
-                        "You are %s, an in-game minecraft player on an anarchy server. Generate ONE concise off-topic comment in 1-2 short sentences that a player might randomly say. " +
-                                "You have a %s personality. Write your response in a %s style - this affects your spelling, grammar, and punctuation. " +
-                                "Topics can include: politics, life events, in-game players, random thoughts. " +
-                                "Do not include your name or any chat formatting in the response. Just write the message you want to say.",
-                        playerName, playerData.personality, playerData.textStyle
+                        "You are %s, a minecraft player. Generate ONE short message like you're chatting on a game server. " +
+                                "Be %s. Talk about: your day, games, random thoughts, or complaints. " +
+                                "Write like a casual gamer - use abbreviations occasionally, be informal.",
+                        playerName, playerData.personality
                 ) :
                 String.format(
-                        "You are %s, an in-game Minecraft player on an anarchy server. Here's the recent chat history:\n\n%s\n\n" +
-                                "Generate ONE concise response in 1-2 short sentences. You have to appear human. " +
-                                "You have a %s personality. Write your response in a %s style - this affects your spelling, grammar, and punctuation. " +
-                                "Do not include your name or any chat formatting in the response. " +
-                                "Just write the message you want to say.",
-                        playerName, context, playerData.personality, playerData.textStyle
+                        "You are %s, a Minecraft player. The recent chat was:\n\n%s\n\n" +
+                                "Now respond with a short, casual message that follows naturally. " +
+                                "Be %s, but remember you're just a normal player (called %s) on the server.",
+                        playerName, context, playerData.personality, playerName
                 );
 
         try {
@@ -91,7 +88,12 @@ public class ChatAI {
                                     "role", "user",
                                     "content", prompt
                             )
-                    )
+                    ),
+                    "temperature", 0.9,
+                    "top_p", 0.8,
+                    "presence_penalty", 0.6,
+                    "frequency_penalty", 0.3,
+                    "max_tokens", 50
             );
 
             HttpRequest request = HttpRequest.newBuilder()
