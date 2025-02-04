@@ -330,7 +330,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         }
 
         // We always schedule the next check, even if no fake players are currently online.
-        long delay = random.nextInt(3000, 7000);
+        long delay = random.nextInt(2800, 8000);
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             // If we have at least one fake player, pick one at random to speak
             if (!currentFakePlayers.isEmpty() && random.nextDouble() > 0.3) {
@@ -340,8 +340,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
                 String response = chatAI.generateResponse(speaker, recentMessages);
                 if (response != null && !response.trim().isEmpty()) {
                     String cleanResponse = response
+                            .replaceAll("(?i)<[^>]*>", "")
                             .replaceAll("(?i)\\*?" + speaker + "\\*?:\\s*", "")
-                            // Remove any leading or trailing quotes, single or double
                             .replaceAll("^['\"]+", "")
                             .replaceAll("['\"]+$", "")
                             .replaceAll("\n.*", "")
@@ -400,6 +400,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     String response = chatAI.generateResponse(fakeName, recentMessages);
                     if (response != null && !response.trim().isEmpty()) {
                         String cleanResponse = response
+                                .replaceAll("(?i)<[^>]*>", "")
                                 .replaceAll("(?i)\\*?" + fakeName + "\\*?:\\s*", "")
                                 .replaceAll("^\"(.+)\"$", "$1")
                                 .replaceAll("\n.*", "")

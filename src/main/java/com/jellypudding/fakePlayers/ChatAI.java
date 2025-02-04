@@ -21,7 +21,7 @@ public class ChatAI {
     private final Map<String, Integer> consecutiveFailures = new ConcurrentHashMap<>();
     // Track "disabled until" per model
     private final Map<String, Long> modelDisabledUntil = new ConcurrentHashMap<>();
-    private static final int MAX_CONSECUTIVE_FAILURES = 7;
+    private static final int MAX_CONSECUTIVE_FAILURES = 4;
     // How long to disable a model if we exceed consecutive failures, in milliseconds (24 hours)
     private static final long DISABLE_DURATION_MS = 24 * 60 * 60 * 1000L;
     private static final String API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -81,20 +81,37 @@ public class ChatAI {
                 );
 
         try {
-            Map<String, Object> requestBody = Map.of(
-                    "model", model,
-                    "messages", List.of(
-                            Map.of(
-                                    "role", "user",
-                                    "content", prompt
-                            )
-                    ),
-                    "temperature", 0.9,
-                    "top_p", 0.8,
-                    "presence_penalty", 0.6,
-                    "frequency_penalty", 0.3,
-                    "max_tokens", 50
-            );
+            Map<String, Object> requestBody;
+            if (model.contains("llama")) {
+                requestBody = Map.of(
+                        "model", model,
+                        "messages", List.of(
+                                Map.of(
+                                        "role", "user",
+                                        "content", prompt
+                                )
+                        ),
+                        "temperature", 0.9,
+                        "top_p", 0.8,
+                        "presence_penalty", 0.6,
+                        "frequency_penalty", 0.3,
+                        "max_tokens", 50
+                );
+            } else {
+                requestBody = Map.of(
+                        "model", model,
+                        "messages", List.of(
+                                Map.of(
+                                        "role", "user",
+                                        "content", prompt
+                                )
+                        ),
+                        "temperature", 0.9,
+                        "top_p", 0.8,
+                        "presence_penalty", 0.6,
+                        "frequency_penalty", 0.3
+                );
+            }
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(API_URL))
@@ -140,8 +157,14 @@ public class ChatAI {
                         return null;
                     }
 
-                    resetFailureCount(model);
                     String content = message.get("content").getAsString().trim();
+
+                    if (content.isEmpty()) {
+                        handleFailure(model);
+                        logger.warning("ChatAI: Model '" + model + "' returned empty content. Returning null.");
+                        return null;
+                    }
+
                     String lower = content.toLowerCase();
                     if (lower.contains("i cannot generate a response") ||
                             lower.contains("i cannot provide") ||
@@ -156,6 +179,7 @@ public class ChatAI {
                         return null;
                     }
 
+                    resetFailureCount(model);
                     return content;
                 } catch (Exception e) {
                     handleFailure(model);
