@@ -25,6 +25,7 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class FakePlayers extends JavaPlugin implements Listener {
 
@@ -35,8 +36,9 @@ public class FakePlayers extends JavaPlugin implements Listener {
     private boolean enableChat;
     private ChatAI chatAI;
     private final Queue<String> recentMessages = new LinkedList<>();
-    private static final int MAX_RECENT_MESSAGES = 8;
+    private static final int MAX_RECENT_MESSAGES = 3;
     Map<String, PlayerFakeAllData> fakePlayerData;
+    private final Map<String, Long> lastResponseTimes = new ConcurrentHashMap<>();
 
     public static class PlayerFakeAllData {
         String texture;
@@ -50,7 +52,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
             this.signature = signature;
             this.personality = personality != null ? personality : "sarcastic and insulting";
             this.textStyle = textStyle != null ? textStyle : "normal";
-            this.model = model != null ? model : "deepseek/deepseek-r1:free";
+            this.model = model != null ? model : "deepseek/deepseek-r1-distill-llama-70b:free";
         }
     }
 
@@ -64,7 +66,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
         getServer().getPluginManager().registerEvents(this, this);
 
-        // Schedules both your random add/remove AND random chat tasks
         scheduleNextUpdate();
         scheduleRandomChat();
 
@@ -97,9 +98,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
         ConfigurationSection playersSection = getConfig().getConfigurationSection("fake-players");
         if (playersSection == null) {
-            // Create default config if none exists
             Map<String, PlayerFakeAllData> defaultPlayers = new HashMap<>();
-            defaultPlayers.put("Steve", new PlayerFakeAllData("defaultTexture", "defaultSignature", "caustic", "perfect", "deepseek/deepseek-r1:free"));
+            defaultPlayers.put("Steve", new PlayerFakeAllData("defaultTexture", "defaultSignature", "caustic", "perfect", "deepseek/deepseek-r1-distill-llama-70b:free"));
 
             for (Map.Entry<String, PlayerFakeAllData> entry : defaultPlayers.entrySet()) {
                 getConfig().set("fake-players." + entry.getKey() + ".texture", entry.getValue().texture);
@@ -110,13 +110,12 @@ public class FakePlayers extends JavaPlugin implements Listener {
             getConfig().set("max-players", maxPlayers);
             saveConfig();
         } else {
-            // Load existing config
             for (String name : playersSection.getKeys(false)) {
                 String texture = playersSection.getString(name + ".texture");
                 String signature = playersSection.getString(name + ".signature");
                 String personality = playersSection.getString(name + ".personality", "cynical");
                 String textStyle = playersSection.getString(name + ".text-style", "perfect");
-                String model = playersSection.getString(name + ".model", "deepseek/deepseek-r1:free");
+                String model = playersSection.getString(name + ".model", "deepseek/deepseek-r1-distill-llama-70b:free");
                 if (texture != null && signature != null) {
                     fakePlayerData.put(name, new PlayerFakeAllData(texture, signature, personality, textStyle, model));
                 }
@@ -137,10 +136,9 @@ public class FakePlayers extends JavaPlugin implements Listener {
         int fakeCount = currentFakePlayers.size();
         int totalCount = realCount + fakeCount;
 
-        final double occupancyThreshold = 0.90; // 90% of maxPlayers
+        final double occupancyThreshold = 0.90;
         double occupancy = (double) totalCount / maxPlayers;
 
-        // If occupancy >= threshold and there's at least one fake player, remove a fake player
         if (occupancy >= occupancyThreshold && !currentFakePlayers.isEmpty()) {
             List<String> current = new ArrayList<>(currentFakePlayers);
             String playerToRemove = current.get(random.nextInt(current.size()));
@@ -148,8 +146,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
             return;
         }
 
-        boolean doAdd = random.nextDouble() < 0.48;
-        boolean doRemove = random.nextDouble() < 0.52;
+        boolean doAdd = random.nextDouble() < 0.47;
+        boolean doRemove = random.nextDouble() < 0.53;
 
         if (doAdd && fakeCount < fakePlayerData.size() &&
                 ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
@@ -171,7 +169,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
         currentFakePlayers.add(name);
         fakePlayerUUIDs.put(name, uuid);
 
-        // Broadcast join message to all players
         Bukkit.broadcast(
                 Component.text(name)
                         .append(Component.text(" joined the game").color(NamedTextColor.YELLOW))
@@ -196,7 +193,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
             );
         }
 
-        // Clean up from server's player list if any players are online.
         if (!Bukkit.getOnlinePlayers().isEmpty()) {
             Player anyPlayer = Bukkit.getOnlinePlayers().iterator().next();
             net.minecraft.server.MinecraftServer server = ((CraftPlayer) anyPlayer).getHandle().getServer();
@@ -231,12 +227,10 @@ public class FakePlayers extends JavaPlugin implements Listener {
                 );
             }
 
-            // Random latency
             int latency = random.nextInt(4) > 0
                     ? random.nextInt(150)
                     : random.nextInt(150, 300);
 
-            // Create a player info packet
             ClientboundPlayerInfoUpdatePacket infoPacket = new ClientboundPlayerInfoUpdatePacket(
                     EnumSet.of(
                             ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER,
@@ -246,8 +240,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     List.of(new ClientboundPlayerInfoUpdatePacket.Entry(
                             uuid,
                             profile,
-                            true,    // listed
-                            latency, // latency
+                            true,
+                            latency,
                             GameType.SURVIVAL,
                             null,
                             false,
@@ -256,7 +250,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     ))
             );
 
-            // Send the packet
             craftPlayer.getHandle().connection.send(infoPacket);
         } catch (Exception e) {
             getLogger().severe("Error adding fake player " + name + ": " + e.getMessage());
@@ -286,7 +279,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joining = event.getPlayer();
-        // Send all fake players to the newly joined real player
         for (String fakeName : currentFakePlayers) {
             UUID uuid = fakePlayerUUIDs.get(fakeName);
             if (uuid != null) {
@@ -297,7 +289,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPaperServerListPing(PaperServerListPingEvent event) {
-        // Keep displayed total from exceeding maxPlayers
         int realCount = Bukkit.getOnlinePlayers().size();
         int allowedFake = Math.max(0, maxPlayers - realCount);
 
@@ -323,56 +314,58 @@ public class FakePlayers extends JavaPlugin implements Listener {
         event.setMaxPlayers(maxPlayers);
     }
 
+    private void handleBotResponse(String speaker, String response) {
+        long currentTime = System.currentTimeMillis();
+        Long lastTime = lastResponseTimes.get(speaker);
+        if (lastTime != null && currentTime - lastTime < 15000) { // 15 seconds
+            return;
+        }
+        lastResponseTimes.put(speaker, currentTime);  // Update timestamp immediately
+
+        if (response != null && !response.trim().isEmpty()) {
+            String cleanResponse = response
+                    .replaceAll("(?i)<[^>]*>", "")
+                    .replaceAll("(?i)\\*?" + speaker + "\\*?:\\s*", "")
+                    .replaceAll("^[\"']|[\"']$", "")
+                    .replaceAll("\n.*", "")
+                    .replaceAll("\"\"", "")
+                    .replaceAll("[^\\p{ASCII}]", "")
+                    .trim();
+
+            if (!cleanResponse.isEmpty() && cleanResponse.length() <= 240) {
+                final String finalResponse = cleanResponse;
+                Bukkit.getScheduler().runTask(this, () -> {
+                    if (currentFakePlayers.contains(speaker)) {
+                        String botMessage = String.format("<%s> %s", speaker, finalResponse);
+                        recentMessages.add(botMessage);
+                        while (recentMessages.size() > MAX_RECENT_MESSAGES) {
+                            recentMessages.poll();
+                        }
+
+                        Bukkit.broadcast(
+                                Component.text("<")
+                                        .append(Component.text(speaker).color(NamedTextColor.WHITE))
+                                        .append(Component.text("> "))
+                                        .append(Component.text(finalResponse))
+                        );
+                    }
+                });
+            }
+        }
+    }
+
     private void scheduleRandomChat() {
-        // Only bail out entirely if chat is disabled or ChatAI is null
         if (!enableChat || chatAI == null) {
             return;
         }
 
-        // We always schedule the next check, even if no fake players are currently online.
         long delay = random.nextInt(2800, 8000);
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
-            // If we have at least one fake player, pick one at random to speak
-            if (!currentFakePlayers.isEmpty() && random.nextDouble() > 0.3) {
+            if (!currentFakePlayers.isEmpty() && random.nextDouble() > 0.45) {
                 List<String> players = new ArrayList<>(currentFakePlayers);
                 String speaker = players.get(random.nextInt(players.size()));
-
-                String response = chatAI.generateResponse(speaker, recentMessages);
-                if (response != null && !response.trim().isEmpty()) {
-                    String cleanResponse = response
-                            .replaceAll("(?i)<[^>]*>", "")
-                            .replaceAll("(?i)\\*?" + speaker + "\\*?:\\s*", "")
-                            .replaceAll("^['\"]+", "")
-                            .replaceAll("['\"]+$", "")
-                            .replaceAll("\n.*", "")
-                            .replaceAll("[^\\p{ASCII}]", "")
-                            .trim();
-                    if (!cleanResponse.isEmpty()) {
-                        final String finalResponse = cleanResponse;
-                        Bukkit.getScheduler().runTask(this, () -> {
-                            // Check if that fake player still exists
-                            if (currentFakePlayers.contains(speaker)) {
-                                String formattedMessage = String.format("<%s> %s", speaker, finalResponse);
-                                recentMessages.add(formattedMessage);
-
-                                // Keep recentMessages from growing too large
-                                while (recentMessages.size() > MAX_RECENT_MESSAGES) {
-                                    recentMessages.poll();
-                                }
-
-                                // Broadcast in chat
-                                Bukkit.broadcast(
-                                        Component.text("<")
-                                                .append(Component.text(speaker).color(NamedTextColor.WHITE))
-                                                .append(Component.text("> "))
-                                                .append(Component.text(finalResponse))
-                                );
-                            }
-                        });
-                    }
-                }
+                handleBotResponse(speaker, chatAI.generateResponse(speaker, recentMessages));
             }
-
             scheduleRandomChat();
         }, delay);
     }
@@ -384,51 +377,29 @@ public class FakePlayers extends JavaPlugin implements Listener {
         String message = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message());
         String playerName = event.getPlayer().getName();
 
-        // Save recent message
         String formattedMessage = String.format("<%s> %s", playerName, message);
         recentMessages.add(formattedMessage);
         while (recentMessages.size() > MAX_RECENT_MESSAGES) {
             recentMessages.poll();
         }
 
-        // Check if the message mentions any fake player's name
+        if (random.nextDouble() > 0.40 && !currentFakePlayers.isEmpty()) {
+            List<String> players = new ArrayList<>(currentFakePlayers);
+            String speaker = players.get(random.nextInt(players.size()));
+
+            Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
+                handleBotResponse(speaker, chatAI.generateResponse(speaker, recentMessages));
+            }, 20L + random.nextInt(40));
+            return;
+        }
+
         String lowerMessage = message.toLowerCase();
         for (String fakeName : currentFakePlayers) {
             if (lowerMessage.contains(fakeName.toLowerCase())) {
-                // Wait 1-3 seconds before responding
                 Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
-                    String response = chatAI.generateResponse(fakeName, recentMessages);
-                    if (response != null && !response.trim().isEmpty()) {
-                        String cleanResponse = response
-                                .replaceAll("(?i)<[^>]*>", "")
-                                .replaceAll("(?i)\\*?" + fakeName + "\\*?:\\s*", "")
-                                .replaceAll("^\"(.+)\"$", "$1")
-                                .replaceAll("\n.*", "")
-                                .replaceAll("[^\\p{ASCII}]", "")
-                                .trim();
-
-                        if (!cleanResponse.isEmpty()) {
-                            final String finalResponse = cleanResponse;
-                            Bukkit.getScheduler().runTask(this, () -> {
-                                if (currentFakePlayers.contains(fakeName)) {
-                                    // Add bot's message to recent messages
-                                    String botMessage = String.format("<%s> %s", fakeName, finalResponse);
-                                    recentMessages.add(botMessage);
-                                    while (recentMessages.size() > MAX_RECENT_MESSAGES) {
-                                        recentMessages.poll();
-                                    }
-
-                                    Bukkit.broadcast(
-                                            Component.text("<")
-                                                    .append(Component.text(fakeName).color(NamedTextColor.WHITE))
-                                                    .append(Component.text("> "))
-                                                    .append(Component.text(finalResponse))
-                                    );
-                                }
-                            });
-                        }
-                    }
+                    handleBotResponse(fakeName, chatAI.generateResponse(fakeName, recentMessages));
                 }, 20L + random.nextInt(40));
+                break;
             }
         }
     }
@@ -438,7 +409,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
         String message = event.getMessage();
         String lowerMessage = message.toLowerCase();
 
-        // Block commands like /plugins, /pl, etc. if no permission
         if ((lowerMessage.startsWith("/plugins") || lowerMessage.startsWith("/pl") ||
                 lowerMessage.startsWith("/help")    || lowerMessage.startsWith("/?"))
                 && !event.getPlayer().hasPermission("fakeplayers.showinfo")) {
@@ -447,7 +417,6 @@ public class FakePlayers extends JavaPlugin implements Listener {
             return;
         }
 
-        // Intercept /list to show fake players
         if (lowerMessage.startsWith("/list")) {
             event.setCancelled(true);
             int realCount = Bukkit.getOnlinePlayers().size();

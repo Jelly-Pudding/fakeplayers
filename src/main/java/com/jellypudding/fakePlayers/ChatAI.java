@@ -49,7 +49,7 @@ public class ChatAI {
         if (isModelDisabled(model)) {
             // Try fallback
             for (String possibleFallback : List.of(
-                    "deepseek/deepseek-r1:free",
+                    "deepseek/deepseek-r1-distill-llama-70b:free",
                     "meta-llama/llama-3.2-3b-instruct" // not free, but we likely exceeded free usage cap.
             )) {
                 if (!isModelDisabled(possibleFallback)) {
@@ -82,7 +82,7 @@ public class ChatAI {
 
         try {
             Map<String, Object> requestBody;
-            if (model.contains("llama")) {
+            if (model.equals("meta-llama/llama-3.2-3b-instruct")) {
                 requestBody = Map.of(
                         "model", model,
                         "messages", List.of(
