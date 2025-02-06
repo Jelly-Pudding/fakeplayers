@@ -320,7 +320,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         if (lastTime != null && currentTime - lastTime < 15000) { // 15 seconds
             return;
         }
-        lastResponseTimes.put(speaker, currentTime);  // Update timestamp immediately
+        lastResponseTimes.put(speaker, currentTime);
 
         if (response != null && !response.trim().isEmpty()) {
             String cleanResponse = response
@@ -334,7 +334,12 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
             if (!cleanResponse.isEmpty() && cleanResponse.length() <= 240) {
                 final String finalResponse = cleanResponse;
-                Bukkit.getScheduler().runTask(this, () -> {
+
+                int baseDelay = (int)(finalResponse.length() * (60.0/250.0) * 20); // Convert to ticks
+                int randomVariation = random.nextInt(Math.max(1, baseDelay/4));
+                int totalDelay = baseDelay + randomVariation;
+
+                Bukkit.getScheduler().runTaskLater(this, () -> {
                     if (currentFakePlayers.contains(speaker)) {
                         String botMessage = String.format("<%s> %s", speaker, finalResponse);
                         recentMessages.add(botMessage);
@@ -349,7 +354,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                                         .append(Component.text(finalResponse))
                         );
                     }
-                });
+                }, totalDelay);
             }
         }
     }

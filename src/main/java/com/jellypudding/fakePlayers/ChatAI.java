@@ -74,9 +74,9 @@ public class ChatAI {
                         playerName, playerData.personality
                 ) :
                 String.format(
-                        "You are %s, a Minecraft player. The recent chat was:\n\n%s\n\n" +
+                        "You are roleplaying as a player named %s. \n\nRecent chat:\n%s\n\n" +
                                 "Now respond with a short, casual message that follows naturally. " +
-                                "Be %s, but remember you're just a normal player (called %s) on the server.",
+                                "Be %s. IMPORTANT: You must respond as %s, not as any other player.",
                         playerName, context, playerData.personality, playerName
                 );
 
@@ -91,7 +91,7 @@ public class ChatAI {
                                         "content", prompt
                                 )
                         ),
-                        "temperature", 0.9,
+                        "temperature", 1.0,
                         "top_p", 0.8,
                         "presence_penalty", 0.6,
                         "frequency_penalty", 0.3,
