@@ -10,6 +10,7 @@ import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class ChatAI {
     private final String apiKey;
@@ -34,8 +35,13 @@ public class ChatAI {
         this.fakePlayerData = fakePlayerData;
     }
 
-    public String generateResponse(String playerName, Queue<String> recentMessages) {
-        String context = String.join("\n", recentMessages);
+    // Note: We now expect recentMessages to be a queue of FakePlayers.ChatMessage objects.
+    public String generateResponse(String playerName, Queue<FakePlayers.ChatMessage> recentMessages) {
+        // Join only the message texts from recentMessages (which have been cleaned already)
+        String context = recentMessages.stream()
+                .map(chatMsg -> chatMsg.message)
+                .collect(Collectors.joining("\n"));
+
         FakePlayers.PlayerFakeAllData playerData = fakePlayerData.get(playerName);
 
         if (playerData == null) {
@@ -50,7 +56,7 @@ public class ChatAI {
             // Try fallback
             for (String possibleFallback : List.of(
                     "deepseek/deepseek-r1-distill-llama-70b:free",
-                    "meta-llama/llama-3.2-3b-instruct" // not free, but we likely exceeded free usage cap.
+                    "mistralai/ministral-8b" // not free, but we likely exceeded free usage cap.
             )) {
                 if (!isModelDisabled(possibleFallback)) {
                     logger.info("Using fallback model '" + possibleFallback + "' for " + playerName);
@@ -75,14 +81,14 @@ public class ChatAI {
                 ) :
                 String.format(
                         "You are roleplaying as a player named %s. \n\nRecent chat:\n%s\n\n" +
-                                "Now respond with a short, casual message that follows naturally. " +
+                                "Now respond with a short, casual message that follows naturally. Do not use any emojis or special characters. " +
                                 "Be %s. IMPORTANT: You must respond as %s, not as any other player.",
                         playerName, context, playerData.personality, playerName
                 );
 
         try {
             Map<String, Object> requestBody;
-            if (model.equals("meta-llama/llama-3.2-3b-instruct")) {
+            if (model.equals("mistralai/ministral-8b")) {
                 requestBody = Map.of(
                         "model", model,
                         "messages", List.of(
@@ -91,10 +97,9 @@ public class ChatAI {
                                         "content", prompt
                                 )
                         ),
-                        "temperature", 1.0,
-                        "top_p", 0.8,
-                        "presence_penalty", 0.6,
-                        "frequency_penalty", 0.3,
+                        "temperature", 0.6,  // Using Ministral's recommended median
+                        "top_p", 1.0,
+                        "repetition_penalty", 1.0,
                         "max_tokens", 50
                 );
             } else {
@@ -106,10 +111,7 @@ public class ChatAI {
                                         "content", prompt
                                 )
                         ),
-                        "temperature", 0.9,
-                        "top_p", 0.8,
-                        "presence_penalty", 0.6,
-                        "frequency_penalty", 0.3
+                        "temperature", 0.83
                 );
             }
 
@@ -165,6 +167,10 @@ public class ChatAI {
                         return null;
                     }
 
+                    if (model.equals("deepseek/deepseek-r1-distill-llama-70b:free")) {
+                        content = extractFinalAnswer(content);
+                    }
+
                     String lower = content.toLowerCase();
                     if (lower.contains("i cannot generate a response") ||
                             lower.contains("i cannot provide") ||
@@ -173,8 +179,9 @@ public class ChatAI {
                             lower.contains("i refuse to") ||
                             lower.contains("i cannot do that") ||
                             lower.contains("as an ai") ||
-                            lower.contains("is there anything else i can help you with"))
-                    {
+                            lower.contains("in this game chat scenario") ||
+                            lower.contains("i need to figure out how to respond as") ||
+                            lower.contains("is there anything else i can help you with")) {
                         logger.info("ChatAI: Model '" + model + "' returned a disclaimer/refusal text. Returning null instead.");
                         return null;
                     }
@@ -194,6 +201,30 @@ public class ChatAI {
             logger.warning("ChatAI: Error generating response: " + e.getMessage());
         }
         return null;
+    }
+
+    private String extractFinalAnswer(String response) {
+        if (response == null || response.isEmpty()) {
+            return response;
+        }
+        // Split the response into lines (handling both \r\n and \n)
+        String[] lines = response.split("\\r?\\n");
+        List<String> nonEmptyLines = new ArrayList<>();
+        for (String line : lines) {
+            if (!line.trim().isEmpty()) {
+                nonEmptyLines.add(line.trim());
+            }
+        }
+        if (nonEmptyLines.isEmpty()) {
+            return response.trim();
+        }
+        // Option 1: If the last two lines are identical, assume that's the final answer.
+        int size = nonEmptyLines.size();
+        if (size >= 2 && nonEmptyLines.get(size - 1).equals(nonEmptyLines.get(size - 2))) {
+            return nonEmptyLines.get(size - 1);
+        }
+        // Option 2: Otherwise, simply return the last non-empty line.
+        return nonEmptyLines.get(size - 1);
     }
 
     private void handleFailure(String model) {
