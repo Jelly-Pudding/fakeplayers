@@ -38,9 +38,9 @@ public class FakePlayers extends JavaPlugin implements Listener {
     private boolean enableChat;
     private ChatAI chatAI;
 
-    // Increase the maximum recent messages to 6 and define message expiration (7 minutes)
-    private static final int MAX_RECENT_MESSAGES = 6;
-    private static final long MESSAGE_EXPIRATION_MS = 7 * 60 * 1000; // 7 minutes in milliseconds
+    // Increase the maximum recent messages to 8 and define message expiration (11 minutes)
+    private static final int MAX_RECENT_MESSAGES = 8;
+    private static final long MESSAGE_EXPIRATION_MS = 11 * 60 * 1000; // 11 minutes in milliseconds
     private final LinkedList<ChatMessage> recentMessages = new LinkedList<>();
 
     Map<String, PlayerFakeAllData> fakePlayerData;
