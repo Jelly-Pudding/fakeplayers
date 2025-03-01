@@ -38,9 +38,9 @@ public class FakePlayers extends JavaPlugin implements Listener {
     private boolean enableChat;
     private ChatAI chatAI;
 
-    // Increase the maximum recent messages to 8 and define message expiration (11 minutes)
-    private static final int MAX_RECENT_MESSAGES = 8;
-    private static final long MESSAGE_EXPIRATION_MS = 11 * 60 * 1000; // 11 minutes in milliseconds
+    // Increase the maximum recent messages to 12 and define message expiration (15 minutes)
+    private static final int MAX_RECENT_MESSAGES = 12;
+    private static final long MESSAGE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
     private final LinkedList<ChatMessage> recentMessages = new LinkedList<>();
 
     Map<String, PlayerFakeAllData> fakePlayerData;
@@ -141,7 +141,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
     }
 
     private void scheduleNextUpdate() {
-        long delay = random.nextInt(3000, 9000);
+        long delay = random.nextInt(3000, 12000);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             updateFakePlayers();
             scheduleNextUpdate();
@@ -163,22 +163,30 @@ public class FakePlayers extends JavaPlugin implements Listener {
             return;
         }
 
-        boolean doAdd = random.nextDouble() < 0.46;
-        boolean doRemove = random.nextDouble() < 0.54;
-
-        if (doAdd && fakeCount < fakePlayerData.size() &&
-                ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
-            List<String> availablePlayers = new ArrayList<>(fakePlayerData.keySet());
-            availablePlayers.removeAll(currentFakePlayers);
-            if (!availablePlayers.isEmpty()) {
-                String randomName = availablePlayers.get(random.nextInt(availablePlayers.size()));
-                addFakePlayer(randomName);
+        int randomAction = random.nextInt(100);
+        
+        // 35% chance to add a player (0-34)
+        if (randomAction < 35) {
+            if (fakeCount < fakePlayerData.size() && 
+                    ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
+                List<String> availablePlayers = new ArrayList<>(fakePlayerData.keySet());
+                availablePlayers.removeAll(currentFakePlayers);
+                if (!availablePlayers.isEmpty()) {
+                    String randomName = availablePlayers.get(random.nextInt(availablePlayers.size()));
+                    addFakePlayer(randomName);
+                }
             }
-        } else if (doRemove && !currentFakePlayers.isEmpty()) {
-            List<String> current = new ArrayList<>(currentFakePlayers);
-            String playerToRemove = current.get(random.nextInt(current.size()));
-            removeFakePlayer(playerToRemove, true);
+        } 
+        // 40% chance to remove a player (35-74)
+        else if (randomAction < 75) {
+            if (!currentFakePlayers.isEmpty()) {
+                List<String> current = new ArrayList<>(currentFakePlayers);
+                String playerToRemove = current.get(random.nextInt(current.size()));
+                removeFakePlayer(playerToRemove, true);
+            }
         }
+        // 25% chance to do nothing (75-99)
+        // No action needed here
     }
 
     // Adds a new chat message and cleans up old ones
@@ -190,7 +198,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         }
     }
 
-    // Removes messages older than MESSAGE_EXPIRATION_MS (7 minutes)
+    // Removes messages older than MESSAGE_EXPIRATION_MS.
     private void cleanupOldMessages() {
         long now = System.currentTimeMillis();
         while (!recentMessages.isEmpty() && now - recentMessages.peek().timestamp > MESSAGE_EXPIRATION_MS) {
@@ -414,7 +422,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
             return;
         }
 
-        long delay = random.nextInt(3500, 15000);
+        long delay = random.nextInt(4000, 19000);
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             if (!currentFakePlayers.isEmpty() && random.nextDouble() > 0.45) {
                 List<String> players = new ArrayList<>(currentFakePlayers);
@@ -436,8 +444,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         String formattedMessage = String.format("<%s> %s", playerName, message);
         addRecentMessage(formattedMessage);
 
-        // First, try the random chance branch for an independent bot response
-        if (random.nextDouble() > 0.80 && !currentFakePlayers.isEmpty()) {
+        if (random.nextDouble() > 0.85 && !currentFakePlayers.isEmpty()) {
             List<String> players = new ArrayList<>(currentFakePlayers);
             String speaker = players.get(random.nextInt(players.size()));
 
@@ -447,12 +454,12 @@ public class FakePlayers extends JavaPlugin implements Listener {
             return;
         }
 
-        // Otherwise, check if the message contains a fake player's name.
+        // Check if the message contains a fake player's name.
         String lowerMessage = message.toLowerCase();
         for (String fakeName : currentFakePlayers) {
             if (lowerMessage.contains(fakeName.toLowerCase())) {
-                // Only respond with a 50% chance even if the name is included.
-                if (random.nextDouble() > 0.5) {
+                // Only respond with a 30% chance even if the name is included.
+                if (random.nextDouble() > 0.7) {
                     Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
                         handleBotResponse(fakeName, chatAI.generateResponse(fakeName, recentMessages));
                     }, 20L + random.nextInt(40));
@@ -495,6 +502,26 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     .append(namesJoined);
 
             event.getPlayer().sendMessage(finalMessage);
+        }
+        else if (lowerMessage.startsWith("/msg ") || lowerMessage.startsWith("/tell ") || lowerMessage.startsWith("/w ")) {
+            String[] parts = message.split(" ", 3);
+            if (parts.length >= 3) {
+                String targetName = parts[1];
+                String whisperContent = parts[2];
+
+                if (currentFakePlayers.contains(targetName)) {
+                    event.setCancelled(true);
+
+                    Component whisperFeedback = Component.text()
+                            .content("You whisper to " + targetName + ": " + whisperContent)
+                            .color(NamedTextColor.GRAY)
+                            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, true)
+                            .build();
+                    
+                    event.getPlayer().sendMessage(whisperFeedback);
+                    // No AI response - just let the message appear to be sent for now.
+                }
+            }
         }
     }
 }
