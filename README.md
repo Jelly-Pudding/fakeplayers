@@ -11,7 +11,7 @@
 - Support for player commands like `/list` and `/msg`
 
 ## Installation
-1. Download the latest release from the releases page
+1. Download the latest release [here](https://github.com/Jelly-Pudding/fakeplayers/releases)
 2. Place the `.jar` file in your Minecraft server's `plugins` folder
 3. Restart your server
 4. Configure the plugin in the `config.yml` file
