@@ -153,7 +153,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
         int fakeCount = currentFakePlayers.size();
         int totalCount = realCount + fakeCount;
 
-        final double occupancyThreshold = 0.90;
+        final double occupancyThreshold = 0.85;
         double occupancy = (double) totalCount / maxPlayers;
 
         if (occupancy >= occupancyThreshold && !currentFakePlayers.isEmpty()) {
@@ -165,8 +165,8 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
         int randomAction = random.nextInt(100);
         
-        // 35% chance to add a player (0-34)
-        if (randomAction < 35) {
+        // 37% chance to add a player (0-36)
+        if (randomAction < 37) {
             if (fakeCount < fakePlayerData.size() && 
                     ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
                 List<String> availablePlayers = new ArrayList<>(fakePlayerData.keySet());
@@ -177,7 +177,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
                 }
             }
         } 
-        // 40% chance to remove a player (35-74)
+        // 38% chance to remove a player (37-74)
         else if (randomAction < 75) {
             if (!currentFakePlayers.isEmpty()) {
                 List<String> current = new ArrayList<>(currentFakePlayers);
@@ -422,12 +422,11 @@ public class FakePlayers extends JavaPlugin implements Listener {
             return;
         }
 
-        long delay = random.nextInt(4000, 19000);
+        long delay = random.nextInt(5000, 40000);
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
-            if (!currentFakePlayers.isEmpty() && random.nextDouble() > 0.45) {
+            if (!currentFakePlayers.isEmpty() && random.nextDouble() > 0.65) {
                 List<String> players = new ArrayList<>(currentFakePlayers);
                 String speaker = players.get(random.nextInt(players.size()));
-                // Pass the recentMessages queue to ChatAI (only fresh messages remain)
                 handleBotResponse(speaker, chatAI.generateResponse(speaker, recentMessages));
             }
             scheduleRandomChat();

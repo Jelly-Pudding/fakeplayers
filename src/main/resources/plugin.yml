@@ -1,5 +1,5 @@
 name: BedrockSupport
-version: '1.0-SNAPSHOT'
+version: '1.0'
 main: com.jellypudding.fakePlayers.FakePlayers
 api-version: '1.21'
 description: "Helps with supporting Bedrock clients joining the server"
