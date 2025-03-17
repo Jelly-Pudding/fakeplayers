@@ -164,9 +164,9 @@ public class FakePlayers extends JavaPlugin implements Listener {
         }
 
         int randomAction = random.nextInt(100);
-        
-        // 37% chance to add a player (0-36)
-        if (randomAction < 37) {
+
+        // 35% chance to add a player (0-34)
+        if (randomAction < 35) {
             if (fakeCount < fakePlayerData.size() && 
                     ((double) (totalCount + 1) / maxPlayers) < occupancyThreshold) {
                 List<String> availablePlayers = new ArrayList<>(fakePlayerData.keySet());
@@ -177,15 +177,15 @@ public class FakePlayers extends JavaPlugin implements Listener {
                 }
             }
         } 
-        // 38% chance to remove a player (37-74)
-        else if (randomAction < 75) {
+        // 38% chance to remove a player (35-72)
+        else if (randomAction < 73) {
             if (!currentFakePlayers.isEmpty()) {
                 List<String> current = new ArrayList<>(currentFakePlayers);
                 String playerToRemove = current.get(random.nextInt(current.size()));
                 removeFakePlayer(playerToRemove, true);
             }
         }
-        // 25% chance to do nothing (75-99)
+        // 27% chance to do nothing (73-99)
         // No action needed here
     }
 
@@ -519,6 +519,38 @@ public class FakePlayers extends JavaPlugin implements Listener {
                     
                     event.getPlayer().sendMessage(whisperFeedback);
                     // No AI response - just let the message appear to be sent for now.
+                }
+            }
+        }
+        else if (lowerMessage.startsWith("/tpa ")) {
+            String[] parts = message.split(" ", 2);
+            if (parts.length >= 2) {
+                String targetName = parts[1];
+
+                if (currentFakePlayers.contains(targetName)) {
+                    event.setCancelled(true);
+                    Player player = event.getPlayer();
+
+                    // Calculate fake timeout similar to SimpleTPA
+                    int timeoutSeconds = 120; // Default to 2 minutes like in SimpleTPA
+                    int minutes = timeoutSeconds / 60;
+                    int seconds = timeoutSeconds % 60;
+                    String timeoutDisplay = minutes > 0 ? minutes + " minute" + (minutes > 1 ? "s" : "") : "";
+                    if (seconds > 0) {
+                        if (!timeoutDisplay.isEmpty()) timeoutDisplay += " and ";
+                        timeoutDisplay += seconds + " second" + (seconds > 1 ? "s" : "");
+                    }
+
+                    // Send fake request messages
+                    player.sendMessage(Component.text("Teleport request sent to " + targetName + ".").color(NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("This request will expire in " + timeoutDisplay + ".").color(NamedTextColor.YELLOW));
+
+                    // Schedule a fake expiration after the timeout
+                    Bukkit.getScheduler().runTaskLater(this, () -> {
+                        if (player.isOnline()) {
+                            player.sendMessage(Component.text("Your teleport request to " + targetName + " has expired.").color(NamedTextColor.RED));
+                        }
+                    }, timeoutSeconds * 20L); // Convert to ticks
                 }
             }
         }
