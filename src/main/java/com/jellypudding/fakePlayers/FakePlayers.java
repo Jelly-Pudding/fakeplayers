@@ -11,6 +11,7 @@ import net.minecraft.world.level.GameType;
 import io.papermc.paper.event.player.AsyncChatEvent;
 
 import org.bukkit.Bukkit;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
@@ -29,7 +30,7 @@ import com.mojang.authlib.properties.Property;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class FakePlayers extends JavaPlugin implements Listener {
+public class FakePlayers extends JavaPlugin implements Listener, TabCompleter {
 
     private Set<String> currentFakePlayers;
     private Map<String, UUID> fakePlayerUUIDs;
@@ -81,6 +82,18 @@ public class FakePlayers extends JavaPlugin implements Listener {
         fakePlayerUUIDs = new HashMap<>();
 
         getServer().getPluginManager().registerEvents(this, this);
+
+        // Register tab completer for TPA command
+        try {
+            if (getServer().getPluginCommand("tpa") != null) {
+                getServer().getPluginCommand("tpa").setTabCompleter(this);
+                getLogger().info("Successfully registered TabCompleter for /tpa command");
+            } else {
+                getLogger().warning("Could not find the tpa command. TabCompleter not registered.");
+            }
+        } catch (Exception e) {
+            getLogger().warning("Failed to register TabCompleter: " + e.getMessage());
+        }
 
         scheduleNextUpdate();
         scheduleRandomChat();
@@ -435,7 +448,7 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerChat(AsyncChatEvent event) {
-        if (!enableChat || chatAI == null) return;
+        if (!enableChat || chatAI == null || event.isCancelled()) return;
 
         String message = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message());
         String playerName = event.getPlayer().getName();
@@ -526,11 +539,14 @@ public class FakePlayers extends JavaPlugin implements Listener {
             String[] parts = message.split(" ", 2);
             if (parts.length >= 2) {
                 String targetName = parts[1];
-
-                if (currentFakePlayers.contains(targetName)) {
+                
+                // Case-insensitive check for fake players
+                String fakePlayer = findFakePlayerIgnoreCase(targetName);
+                
+                if (fakePlayer != null) {
                     event.setCancelled(true);
                     Player player = event.getPlayer();
-
+                    
                     // Calculate fake timeout similar to SimpleTPA
                     int timeoutSeconds = 120; // Default to 2 minutes like in SimpleTPA
                     int minutes = timeoutSeconds / 60;
@@ -540,19 +556,52 @@ public class FakePlayers extends JavaPlugin implements Listener {
                         if (!timeoutDisplay.isEmpty()) timeoutDisplay += " and ";
                         timeoutDisplay += seconds + " second" + (seconds > 1 ? "s" : "");
                     }
-
-                    // Send fake request messages
-                    player.sendMessage(Component.text("Teleport request sent to " + targetName + ".").color(NamedTextColor.GREEN));
+                    
+                    // Send fake request messages - use the correctly cased name
+                    player.sendMessage(Component.text("Teleport request sent to " + fakePlayer + ".").color(NamedTextColor.GREEN));
                     player.sendMessage(Component.text("This request will expire in " + timeoutDisplay + ".").color(NamedTextColor.YELLOW));
-
+                    
                     // Schedule a fake expiration after the timeout
+                    final String finalFakePlayer = fakePlayer;
                     Bukkit.getScheduler().runTaskLater(this, () -> {
                         if (player.isOnline()) {
-                            player.sendMessage(Component.text("Your teleport request to " + targetName + " has expired.").color(NamedTextColor.RED));
+                            player.sendMessage(Component.text("Your teleport request to " + finalFakePlayer + " has expired.").color(NamedTextColor.RED));
                         }
                     }, timeoutSeconds * 20L); // Convert to ticks
                 }
             }
         }
+    }
+
+    // Helper method to find a fake player ignoring case
+    private String findFakePlayerIgnoreCase(String name) {
+        String lowerName = name.toLowerCase();
+        for (String fakePlayer : currentFakePlayers) {
+            if (fakePlayer.toLowerCase().equals(lowerName)) {
+                return fakePlayer;
+            }
+        }
+        return null;
+    }
+
+    // Implement TabCompleter interface
+    @Override
+    public List<String> onTabComplete(org.bukkit.command.CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) {
+        if (command.getName().equalsIgnoreCase("tpa") && args.length == 1) {
+            String partialName = args[0].toLowerCase();
+            List<String> suggestions = new ArrayList<>();
+            
+            // Add fake players to suggestions
+            for (String fakeName : currentFakePlayers) {
+                if (fakeName.toLowerCase().startsWith(partialName)) {
+                    suggestions.add(fakeName);
+                }
+            }
+            
+            return suggestions;
+        }
+        
+        // Return null for default behavior in other cases
+        return null;
     }
 }
