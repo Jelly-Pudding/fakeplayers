@@ -11,7 +11,6 @@ import net.minecraft.world.level.GameType;
 import io.papermc.paper.event.player.AsyncChatEvent;
 
 import org.bukkit.Bukkit;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
@@ -30,7 +29,7 @@ import com.mojang.authlib.properties.Property;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class FakePlayers extends JavaPlugin implements Listener, TabCompleter {
+public class FakePlayers extends JavaPlugin implements Listener {
 
     private Set<String> currentFakePlayers;
     private Map<String, UUID> fakePlayerUUIDs;
@@ -584,7 +583,7 @@ public class FakePlayers extends JavaPlugin implements Listener, TabCompleter {
         return null;
     }
 
-    // Implement TabCompleter interface
+    // Implement tab completion for commands
     @Override
     public List<String> onTabComplete(org.bukkit.command.CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("tpa") && args.length == 1) {
