@@ -589,17 +589,27 @@ public class FakePlayers extends JavaPlugin implements Listener {
         if (command.getName().equalsIgnoreCase("tpa") && args.length == 1) {
             String partialName = args[0].toLowerCase();
             List<String> suggestions = new ArrayList<>();
-            
+
+            // Add real players to suggestions
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (player.getName().toLowerCase().startsWith(partialName)) {
+                    suggestions.add(player.getName());
+                }
+            }
+
             // Add fake players to suggestions
             for (String fakeName : currentFakePlayers) {
                 if (fakeName.toLowerCase().startsWith(partialName)) {
                     suggestions.add(fakeName);
                 }
             }
-            
+
+            // Sort alphabetically (standard tab completion behavior)
+            Collections.sort(suggestions);
+
             return suggestions;
         }
-        
+
         // Return null for default behavior in other cases
         return null;
     }
