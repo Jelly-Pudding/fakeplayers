@@ -4,3 +4,4 @@ main: com.jellypudding.fakePlayers.FakePlayers
 api-version: '1.21'
 description: "Helps with supporting Bedrock clients joining the server"
 author: AlphaAlex115
+depend: [SimpleTPA]

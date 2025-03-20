@@ -82,17 +82,9 @@ public class FakePlayers extends JavaPlugin implements Listener {
 
         getServer().getPluginManager().registerEvents(this, this);
 
-        // Register tab completer for TPA command
-        try {
-            if (getServer().getPluginCommand("tpa") != null) {
-                getServer().getPluginCommand("tpa").setTabCompleter(this);
-                getLogger().info("Successfully registered TabCompleter for /tpa command");
-            } else {
-                getLogger().warning("Could not find the tpa command. TabCompleter not registered.");
-            }
-        } catch (Exception e) {
-            getLogger().warning("Failed to register TabCompleter: " + e.getMessage());
-        }
+        // Register tab completer for TPA command - directly set it without checking
+        getServer().getPluginCommand("tpa").setTabCompleter(this);
+        getLogger().info("Registered TabCompleter for /tpa command");
 
         scheduleNextUpdate();
         scheduleRandomChat();
